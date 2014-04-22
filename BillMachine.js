@@ -1,15 +1,5 @@
 var AbstractBillItemState = function(billItem){
 	this.billItem = billItem;
-	/*
-	this.onPublished = function(){ console.log("Not Implemented.."); };
-	this.onAccepted = function(){ console.log("Not Implemented.."); };
-	this.onRejected = function(){ console.log("Not Implemented.."); };
-	this.onSettlement = function(settlement){ console.log("Not Implemented.."); };
-	this.onParticipantAdd = function(){ console.log("Not Implemented.."); };
-	this.onWithdrawal = function(){ console.log("Not Implemented.."); };
-	this.onClose = function(){ console.log("Not Implemented.."); };
-	this.onDelete = function(){ console.log("Not Implemented.."); };
-	*/
 	this.currentState = "AbstractBillItemState";
 }
 
@@ -96,15 +86,21 @@ BiAccepted.prototype = new AbstractBillItemState(null);
 BiAccepted.prototype.constructor = AbstractBillItemState;
 
 BiAccepted.prototype.onSettlement = function(settlement){
-	console.log("Bill item for : " + this.billItem.owner.name + " is now Settled and on " + this.billItem.currentState.toString());
-	//checks if the amount is same as the shareing amount
-	if((this.billItem.parentBill.amount / this.billItem.parentBill.sharePersons.length) == amount){
+	//checks if the amount is same as the shareing 
+	
+	//Get the amount of the share for this person
+	var personShare = (this.billItem.parentBill.amount / (this.billItem.parentBill.sharePersons.length + 1)) ;
+	if( personShare == settlement.amount ){
 		this.billItem.currentState = (new BiSettled(this.billItem));
-		return this.billItem.currentState;
-	}else
-	{
+		this.billItem.settlements.push(settlement);
+		console.log("Bill item for : " + this.billItem.owner.name + " is now Settled and on " + this.billItem.currentState.toString());	
+	}else if(personShare > settlement.amount ){
 		this.billItem.currentState = (new BiPartiallySettled(this.billItem));
-		return this.billItem.currentState;
+		this.billItem.settlements.push(settlement);
+		console.log("Bill item for : " + this.billItem.owner.name + " is now partially settled and on " + this.billItem.currentState.toString());	
+	}
+	else{
+		console.log("Error settlement amount is more than the share amount");
 	}
 };
 
@@ -152,13 +148,23 @@ BiPartiallySettled.prototype = new AbstractBillItemState(null);
 
 BiPartiallySettled.prototype.constructor = AbstractBillItemState;
 
-BiPartiallySettled.prototype.onSettlement = function(amount){
-	console.log("Bill item for : " + this.billItem.owner.name + " is now Settled and on " + this.billItem.currentState.toString());
-	//checks if the amount is same as the shareing amount
-	if((this.billItem.parentBill.amount / this.billItem.parentBill.sharePersons.length) == amount){
+BiPartiallySettled.prototype.onSettlement = function(settlement){
+	//Get the already settled amount total
+	var settledAmount = this.billItem.getSettledAmount();
+	//Get the amount of the share for this person
+	var personShare = (this.billItem.parentBill.amount / (this.billItem.parentBill.sharePersons.length + 1)) ;
+	if( personShare == settlement.amount + settledAmount){
 		this.billItem.currentState = (new BiSettled(this.billItem));
+		this.billItem.settlements.push(settlement);
+		console.log("Bill item for : " + this.billItem.owner.name + " is now Settled and on " + this.billItem.currentState.toString());	
+	}else if(personShare > settlement.amount + settledAmount){
+		this.billItem.currentState = (new BiPartiallySettled(this.billItem));
+		this.billItem.settlements.push(settlement);
+		console.log("Bill item for : " + this.billItem.owner.name + " is now partially settled and on " + this.billItem.currentState.toString());	
 	}
-	return this.billItem.currentState;
+	else{
+		console.log("Error settlement amount is more than the share amount");
+	}	
 };
 
 //BiSettled
@@ -205,7 +211,7 @@ var Person = function(personId,name){
 var BillItem = function(commonBill,owner){
 	this.parentBill = commonBill;
 	this.amount = this.parentBill.amount/this.parentBill.sharePersons.length;
-	this.settlements = null;
+	this.settlements = [];
 	this.owner = owner;
 	this.currentState = (new BiAssigned(this));
 	//console.log(this.parentBill.billID);
@@ -218,8 +224,14 @@ var BillItem = function(commonBill,owner){
 	this.onWithdrawal = function(){ this.currentState.onWithdrawal(); };
 	this.onClose = function(){ this.currentState.onClose(); };
 	this.onDelete = function(){ this.currentState.onDelete(); };
-	this.changeState=function(State){
-		this.currentState = State;
+
+	this.getSettledAmount = function(){
+		var settledAmount = 0;
+		if(this.settlements != undefined)
+			for (var i = this.settlements.length - 1; i >= 0; i--) {
+				settledAmount += this.settlements[i].amount
+			};
+		return settledAmount;
 	};
 }
 
@@ -266,7 +278,7 @@ CommonBill.prototype.toString = function(){
 };
 
 
-var cb = new CommonBill("Food","Dinner","Birthday",12.50,new Person(0,"Desmond"),[new Person(1,"Gana"),new Person(2,"Thompson")]);
+var cb = new CommonBill("Food","Dinner","Birthday",12,new Person(0,"Desmond"),[new Person(1,"Gana"),new Person(2,"Thompson")]);
 cb.billID = 1;
 console.log(cb.toString());
 
@@ -276,7 +288,10 @@ cb.generateBill(cb);
 var _billItem = cb.billItems;
 
 _billItem[0].onAccepted();
-_billItem = cb.billItems;
+_billItem[1].onRejected();
+_billItem[0].onSettlement(new Settlement(_billItem[0].owner,2));
+_billItem[0].onSettlement(new Settlement(_billItem[0].owner,2));
+//_billItem[0].onSettlement(new Settlement(_billItem[0].owner,2.50));
 
 for (var i = _billItem.length - 1; i >= 0; i--) {
 	//console.log(_billItem[i].currentState.currentState.toString());
